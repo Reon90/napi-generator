@@ -1,0 +1,78 @@
+const { platform } = process;
+const skia = require(`../build/${platform}/Release/skiaJS.node`);
+
+function skColorSetArgb(a, r, g, b) {
+    return (((a) << 24) | ((r) << 16) | ((g) << 8) | (b));
+}
+
+function getMemory(p, l) {
+    return skia.getMemory(p, l);
+}
+
+{% for call in calls2 -%}
+class {{ call.constructor }} {
+    {% for method in call -%}
+    {% if method.args[0].name === call.instance %}
+    {{ method.name }}({{ method.args | join(",") }}) {
+        skia.{{ method.name }}({{ method.args | join(",") }});
+    }
+    {% else %}
+    static {{ method.name }}({{ method.args | join(",") }}) {
+        skia.{{ method.name }}({{ method.args | join(",") }});
+    }
+    {% endif %}
+    {% endfor %}
+}
+{% endfor %}
+
+{% for call in calls -%}
+function {{ snakeToCamel(call.name) }}({% for arg in call.args -%}ra{{ loop.index }}{% if loop.index < loop.length %},{% endif %}{% endfor %}) {
+    for (let i = 0; arguments.length > i; i++) {
+        if (arguments[i] instanceof Struct) {
+            arguments[i] = arguments[i].buffer;
+        }
+    }
+    return skia.{{ snakeToCamel(call.name) }}({% for arg in call.args -%}ra{{ loop.index }}{% if loop.index < loop.length %},{% endif %}{% endfor %});
+}
+{% endfor %}
+
+class Struct {}
+{% for struct in structs -%}
+class {{ removeT(snakeToCamel(struct.name)) }} extends Struct {
+    constructor(data) {
+        super();
+        this.buffer = new ArrayBuffer({{ struct.size }});
+        this.view = new DataView(this.buffer);
+        {% for member in struct.members -%}
+        {% if member.type === 'float' -%}
+        this.view.setFloat32({{ member.offset }}, data.{{ member.name }}, true);
+        {% elseif member.type === 'int' or member.type === 'int32_t' or member.type === 'uint32_t' or member.type === 'unsigned int' or member.type === 'long int' or member.type === 'uint8_t' or member.type === 'uint16_t' or member.type === 'int16_t' or member.type === 'Enumeration' or member.type === '_Bool' -%}
+        {% if member.size === 4 -%}
+        this.view.setInt32({{ member.offset }}, data.{{ member.name }}, true);
+        {% elseif member.size === 2 -%}
+        this.view.setInt16({{ member.offset }}, data.{{ member.name }}, true);
+        {% elseif member.size === 1 -%}
+        this.view.setInt8({{ member.offset }}, data.{{ member.name }}, true);
+        {% endif -%}
+        {% elseif member.type === 'PointerType' -%}
+        this.view.setBigInt64({{ member.offset }}, data.{{ member.name }}, true);
+        {% else -%}
+        this.view.set(data.{{member.name}}, {{member.offset}});
+        {% endif -%}
+        {% endfor %}
+    }
+}
+{% endfor -%}
+
+
+module.exports = {
+    skColorSetArgb,
+    getMemory,
+    enums: {{ enums | dump }},
+    {% for struct in structs -%}
+    {{ removeT(snakeToCamel(struct.name)) }},
+    {% endfor %}
+    {% for call in calls -%}
+    {{ snakeToCamel(call.name) }},
+    {% endfor %}
+};

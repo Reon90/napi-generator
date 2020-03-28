@@ -1,0 +1,174 @@
+#include "include/c/gr_context.h"
+#include "include/c/sk_bitmap.h"
+#include "include/c/sk_canvas.h"
+#include "include/c/sk_codec.h"
+#include "include/c/sk_colorfilter.h"
+#include "include/c/sk_colorspace.h"
+#include "include/c/sk_colortable.h"
+#include "include/c/sk_data.h"
+#include "include/c/sk_document.h"
+#include "include/c/sk_drawable.h"
+#include "include/c/sk_general.h"
+#include "include/c/sk_image.h"
+#include "include/c/sk_imagefilter.h"
+#include "include/c/sk_mask.h"
+#include "include/c/sk_maskfilter.h"
+#include "include/c/sk_matrix.h"
+#include "include/c/sk_paint.h"
+#include "include/c/sk_path.h"
+#include "include/c/sk_patheffect.h"
+#include "include/c/sk_picture.h"
+#include "include/c/sk_pixmap.h"
+#include "include/c/sk_region.h"
+#include "include/c/sk_rrect.h"
+#include "include/c/sk_shader.h"
+#include "include/c/sk_stream.h"
+#include "include/c/sk_string.h"
+#include "include/c/sk_surface.h"
+#include "include/c/sk_svg.h"
+#include "include/c/sk_textblob.h"
+#include "include/c/sk_typeface.h"
+#include "include/c/sk_types.h"
+#include "include/c/sk_vertices.h"
+#include "include/c/sk_xml.h"
+
+napi_value getMemory(napi_env env, napi_callback_info info) {
+  napi_status status;
+  napi_value num;
+  
+  size_t argc = 2;
+  napi_value args[2];
+  status = napi_get_cb_info(env, info, &argc, args, NULL, NULL);
+  assert(status == napi_ok);
+
+  bool lossless = true;
+  
+  int64_t p;
+  status = napi_get_value_bigint_int64(env, args[0], &p, &lossless);
+  assert(status == napi_ok);
+  int64_t l;
+  status = napi_get_value_bigint_int64(env, args[1], &l, &lossless);
+  assert(status == napi_ok);
+
+  status = napi_create_external_arraybuffer(env, p, l, NULL, NULL, &num);
+  assert(status == napi_ok);
+  return num;
+}
+
+{% for call in calls -%}
+
+napi_value {{ snakeToCamel(call.name) }}(napi_env env, napi_callback_info info) {
+  napi_status status;
+  napi_value num;
+
+  {% if call.args.length > 0 %}
+  size_t argc = {{ call.args.length }};
+  napi_value args[{{ call.args.length }}];
+  status = napi_get_cb_info(env, info, &argc, args, NULL, NULL);
+  assert(status == napi_ok);
+  {% endif -%}
+
+  {% for a in call.args -%}
+  {% set arg = 'a' + loop.index %}
+  {% if a.struct or a.sub_type === "ArrayType" or a.type === "void" %}
+    napi_valuetype t{{ arg }};
+    status = napi_typeof(env, args[{{ a.i }}], &t{{ arg }});
+    assert(status == napi_ok);
+
+    {% if a.sub_type === "PointerType" or a.sub_type === "ArrayType" %}
+    {{ buildTypeString(a) }} r{{ arg }} = NULL;
+    {% else %}
+    {{ buildTypeString(a) }} r{{ arg }};
+    {% endif -%}
+    if (t{{ arg }} != napi_null) {
+    void **{{ arg }};
+    void *p{{ arg }};
+    {{ arg }} = &p{{ arg }};
+    status = napi_get_arraybuffer_info(env, args[{{ a.i }}], {{ arg }}, NULL);
+    assert(status == napi_ok);
+    {% if a.sub_type === "PointerType" or a.sub_type === "ArrayType" %}
+    r{{ arg }} = ({{ buildTypeString(a) }})*{{ arg }};
+    {% else %}
+    r{{ arg }} = *(({{ buildTypeString(a) }}*)*{{ arg }});
+    {% endif -%}
+    }
+  {% elseif a.sub_type === "uint32_t" or a.type === "uint32_t" or a.type === "uint8_t" or a.type === "uint16_t" %}
+    {% if a.sub_type === "PointerType" %}
+    unsigned int{{ buildTypeString2(a) }} r{{ arg }} = NULL;
+    {% else %}
+    unsigned int{{ buildTypeString2(a) }} r{{ arg }};
+    {% endif -%}
+    status = napi_get_value_uint32(env, args[{{ a.i }}], {{ buildArgsString(a) }}r{{ arg }});
+    assert(status == napi_ok);
+  {% elseif a.type === "int" or a.enum or a.type === "size_t" or a.type === "int32_t" or a.type === "int64_t" %}
+    {% if a.sub_type === "PointerType" %}
+    int{{ buildTypeString2(a) }} r{{ arg }} = NULL;
+    {% else %}
+    int{{ buildTypeString2(a) }} r{{ arg }};
+    {% endif -%}
+    status = napi_get_value_int32(env, args[{{ a.i }}], {{ buildArgsString(a) }}r{{ arg }});
+    assert(status == napi_ok);
+  {% elseif a.type === "double" %}
+    {% if a.sub_type === "PointerType" %}
+    {{ buildTypeString(a) }} r{{ arg }} = NULL;
+    {% else %}
+    {{ buildTypeString(a) }} r{{ arg }};
+    {% endif -%}
+    status = napi_get_value_double(env, args[{{ a.i }}], {{ buildArgsString(a) }}r{{ arg }});
+    assert(status == napi_ok);
+  {% elseif a.type === "_Bool" %}
+    {% if a.sub_type === "PointerType" %}
+    {{ buildTypeString(a) }} r{{ arg }} = NULL;
+    {% else %}
+    {{ buildTypeString(a) }} r{{ arg }};
+    {% endif -%}
+    status = napi_get_value_bool(env, args[{{ a.i }}], {{ buildArgsString(a) }}r{{ arg }});
+    assert(status == napi_ok);
+  {% elseif a.type === "char" %}
+    size_t l{{ arg }};
+    status = napi_get_value_string_utf8(env, args[{{ a.i }}], NULL, 0, &l{{ arg }});
+    assert(status == napi_ok);
+    char* r{{ arg }} = (char*)malloc(l{{ arg }} + 1);
+    status = napi_get_value_string_utf8(env, args[{{ a.i }}], r{{ arg }}, l{{ arg }} + 1, &l{{ arg }});
+    assert(status == napi_ok);
+  {% else %}
+    napi_valuetype t{{ arg }};
+    status = napi_typeof(env, args[{{ a.i }}], &t{{ arg }});
+    assert(status == napi_ok);
+
+    {% if a.sub_type === "PointerType" or a.sub_type === "ArrayType" %}
+    {{ buildTypeString(a) }} r{{ arg }} = NULL;
+    {% else %}
+    {{ buildTypeString(a) }} r{{ arg }};
+    {% endif -%}
+    if (t{{ arg }} != napi_null) {
+      void **{{ arg }};
+      void *p{{ arg }};
+      {{ arg }} = &p{{ arg }};
+      status = napi_get_value_external(env, args[{{ a.i }}], {{ arg }});
+      assert(status == napi_ok);
+      {% if a.sub_type === "PointerType" or a.sub_type === "ArrayType" %}
+      r{{ arg }} = ({{ buildTypeString(a) }})*{{ arg }};
+      {% else %}
+      r{{ arg }} = *(({{ buildTypeString(a) }}*)*{{ arg }});
+      {% endif -%}
+    }
+  {% endif -%}
+  {% endfor -%}
+
+  {{ buildReturnString(call.res) }} {{ call.name }}({% for arg in call.args -%}ra{{ loop.index }}{% if loop.index < loop.length %},{% endif %}{% endfor %});
+
+  {% if call.res.type === "void" and call.res.sub_type === "PointerType" %}
+  status = napi_create_bigint_int64(env, {{ buildArgsString(call.res) }}res, &num);
+  assert(status == napi_ok);
+  {% elseif call.res.type === "size_t" %}
+  status = napi_create_int32(env, res, &num);
+  assert(status == napi_ok);
+  {% else %}
+  status = napi_create_external(env, {{ buildArgsString(call.res) }}res, NULL, NULL, &num);
+  assert(status == napi_ok);
+  {% endif -%}
+  return num;
+}
+
+{% endfor %}

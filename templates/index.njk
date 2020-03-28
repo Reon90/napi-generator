@@ -1,0 +1,19 @@
+#define NAPI_EXPERIMENTAL
+
+#include <assert.h>
+#include <node_api.h>
+
+#include "calls.c"
+
+#define DECLARE_NAPI_METHOD(name, func)                                        \
+  { name, 0, func, 0, 0, 0, napi_default, 0 }
+
+napi_value Init(napi_env env, napi_value exports) {
+  napi_status status;
+  napi_property_descriptor desc[] = { DECLARE_NAPI_METHOD("getMemory", getMemory), {% for call in calls -%} DECLARE_NAPI_METHOD("{{ snakeToCamel(call.name) }}", {{ snakeToCamel(call.name) }}), {% endfor %} };
+  status = napi_define_properties(env, exports, {{ calls.length + 1 }}, desc);
+  assert(status == napi_ok);
+  return exports;
+}
+
+NAPI_MODULE(NODE_GYP_MODULE_NAME, Init)
