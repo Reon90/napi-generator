@@ -23,16 +23,44 @@ function snakeToCamel(name) {
     return name.replace(/_([a-z])/g, g => g[1].toUpperCase());
 }
 
-function removeT(name) {
-    return name.replace(/T$/, '');
-}
+function getTypescriptType(e) {
+  const {type, sub_type}=e;
+  let t = type;
+    switch (true) {
+      case type === 'bool': {
+        t= `boolean`;
+        break;
+      }
+      case type === 'int' || type === 'uint32_t' || type === 'uint64_t' || type === 'unsigned int' || type === 'short unsigned int': {
+        t= `number`;
+        break;
+      }
+      case type === 'char' || type === 'unsigned char': {
+        t= `string`;
+        break;
+      }
+      case type === 'double': {
+        t= `bigint`;
+        break;
+      }
+      case type === 'void': {
+        t= `void`;
+        break;
+      }
+    };
+    if(sub_type === 'ArrayType') {
+      t+='[]';
+    }
+
+    return t;
+  };
 
 module.exports = {
+    getTypescriptType,
     buildArgsString,
     buildTypeString2,
     buildConst,
     buildReturnString,
     buildTypeString,
-    snakeToCamel,
-    removeT
+    snakeToCamel
 };

@@ -1,0 +1,17 @@
+{% for struct in structs -%}
+interface  {{struct.name}} {
+    {% for member in struct.members -%}
+    {{member.name}}: {{getTypescriptType((member))}};
+    {% endfor %}
+}
+{% endfor %}
+
+{% for call in fn -%}
+interface {{call.name}} {
+  ({% for arg in call.args -%}a{{ arg.i }}: {{ getTypescriptType((arg)) }}{% if loop.index < loop.length %},{% endif %}{% endfor %}): {{ getTypescriptType((call.res)) }};
+}
+{% endfor %}
+
+{% for call in calls -%}
+export function {{ call.name }}({% for arg in call.args -%}{{ arg.name }}: {{ getTypescriptType((arg)) }}{% if loop.index < loop.length %},{% endif %}{% endfor %}): {{ getTypescriptType((call.res)) }};
+{% endfor %}
